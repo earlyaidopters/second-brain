@@ -80,11 +80,12 @@ fi
 # ─── STEP 5: Python deps ─────────────────────────────────────────────────────
 echo ""
 echo -e "${WHITE}Step 4/6 — Installing Python dependencies${RESET}"
-if command -v pip3 &>/dev/null; then
-  pip3 install -q google-genai python-dotenv python-docx python-pptx pillow 2>/dev/null
-  echo -e "  ${GREEN}✓${RESET} Python packages installed"
+if command -v python3 &>/dev/null; then
+  # Use a local venv to avoid macOS PEP 668 "externally managed" pip errors
+  python3 -m venv "$SCRIPT_DIR/.venv" 2>/dev/null || true
+  "$SCRIPT_DIR/.venv/bin/pip" install -q -r "$SCRIPT_DIR/requirements.txt"     && echo -e "  ${GREEN}✓${RESET} Python packages installed"     || echo -e "  ${ORANGE}⚠${RESET}  pip install failed — try: pip3 install -r requirements.txt"
 else
-  echo -e "  ${ORANGE}⚠${RESET}  pip3 not found — install Python 3 and re-run this script"
+  echo -e "  ${ORANGE}⚠${RESET}  Python 3 not found. Install: brew install python3"
 fi
 
 # ─── STEP 6: Vault setup ─────────────────────────────────────────────────────
@@ -139,7 +140,7 @@ if [ -n "$IMPORT_FOLDER" ] && [ -d "$IMPORT_FOLDER" ]; then
   echo ""
   echo "  Processing files with Gemini 3 Flash..."
   cd "$VAULT_PATH"
-  python3 scripts/process_docs_to_obsidian.py "$IMPORT_FOLDER" "$VAULT_PATH/inbox"
+  "$SCRIPT_DIR/.venv/bin/python3" scripts/process_docs_to_obsidian.py "$IMPORT_FOLDER" "$VAULT_PATH/inbox"
   echo ""
   echo -e "  ${GREEN}✓${RESET} Files processed → saved to $VAULT_PATH/inbox"
   echo -e "  ${DIM}Open Claude Code in your vault and say:${RESET}"
@@ -165,7 +166,7 @@ echo -e "  ${CYAN}4.${RESET} Run your first command: ${DIM}/vault-setup${RESET}"
 echo -e "     Claude Code will interview you and personalize your CLAUDE.md"
 echo ""
 echo -e "  ${DIM}Need to process more files later?${RESET}"
-echo -e "  ${DIM}python3 scripts/process_docs_to_obsidian.py ~/your-files $VAULT_PATH/inbox${RESET}"
+echo -e "  ${DIM}"$SCRIPT_DIR/.venv/bin/python3" scripts/process_docs_to_obsidian.py ~/your-files $VAULT_PATH/inbox${RESET}"
 echo ""
 
 # Open Obsidian
