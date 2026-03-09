@@ -5,6 +5,9 @@ set -e
 #  SECOND BRAIN — One-command setup for Obsidian + Claude Code
 # ─────────────────────────────────────────────────────────────────────────────
 
+# SCRIPT_DIR must be defined first — used throughout
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 PURPLE='\033[0;35m'
 ORANGE='\033[0;33m'
 GREEN='\033[0;32m'
@@ -40,7 +43,7 @@ echo ""
 # ─── STEP 1: Check OS ───────────────────────────────────────────────────────
 if [[ "$OSTYPE" != "darwin"* ]]; then
   echo -e "${ORANGE}⚠️  This setup script is currently macOS only.${RESET}"
-  echo "   Windows/Linux support coming soon."
+  echo "   Windows: run setup.ps1 instead."
   exit 1
 fi
 
@@ -77,13 +80,14 @@ else
   echo -e "  ${GREEN}✓${RESET} Claude Code already installed"
 fi
 
-# ─── STEP 5: Python deps ─────────────────────────────────────────────────────
+# ─── STEP 5: Python deps (venv to avoid PEP 668 on modern macOS) ─────────────
 echo ""
 echo -e "${WHITE}Step 4/6 — Installing Python dependencies${RESET}"
 if command -v python3 &>/dev/null; then
-  # Use a local venv to avoid macOS PEP 668 "externally managed" pip errors
   python3 -m venv "$SCRIPT_DIR/.venv" 2>/dev/null || true
-  "$SCRIPT_DIR/.venv/bin/pip" install -q -r "$SCRIPT_DIR/requirements.txt"     && echo -e "  ${GREEN}✓${RESET} Python packages installed"     || echo -e "  ${ORANGE}⚠${RESET}  pip install failed — try: pip3 install -r requirements.txt"
+  "$SCRIPT_DIR/.venv/bin/pip" install -q -r "$SCRIPT_DIR/requirements.txt" \
+    && echo -e "  ${GREEN}✓${RESET} Python packages installed" \
+    || echo -e "  ${ORANGE}⚠${RESET}  pip install failed — try manually: pip3 install -r requirements.txt"
 else
   echo -e "  ${ORANGE}⚠${RESET}  Python 3 not found. Install: brew install python3"
 fi
@@ -93,29 +97,32 @@ echo ""
 echo -e "${WHITE}Step 5/6 — Setting up your vault${RESET}"
 echo ""
 echo -e "  Where should your second brain live?"
-echo -e "  ${DIM}Press Enter for default: ~/second-brain${RESET}"
+echo -e "  ${DIM}Press Enter for default: ~/vault${RESET}"
 read -p "  Vault path: " VAULT_PATH
-VAULT_PATH="${VAULT_PATH:-$HOME/second-brain}"
+VAULT_PATH="${VAULT_PATH:-$HOME/vault}"
 VAULT_PATH="${VAULT_PATH/#\~/$HOME}"
 
-mkdir -p "$VAULT_PATH"/{inbox,daily,projects,research,archive,.claude/skills/vault-setup,.claude/skills/daily,.claude/skills/tldr}
+# Guard: don't let vault = the repo folder (causes identical file cp errors)
+if [ "$VAULT_PATH" = "$SCRIPT_DIR" ]; then
+  echo -e "  ${ORANGE}⚠${RESET}  Vault can't be the same folder as the repo. Using ~/vault instead."
+  VAULT_PATH="$HOME/vault"
+fi
 
-# Copy template files
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cp "$SCRIPT_DIR/CLAUDE.md" "$VAULT_PATH/CLAUDE.md"
-cp "$SCRIPT_DIR/memory.md" "$VAULT_PATH/memory.md"
+mkdir -p "$VAULT_PATH"/{inbox,daily,projects,research,archive,scripts,.claude/skills/vault-setup,.claude/skills/daily,.claude/skills/tldr}
+
+cp "$SCRIPT_DIR/CLAUDE.md"  "$VAULT_PATH/CLAUDE.md"
+cp "$SCRIPT_DIR/memory.md"  "$VAULT_PATH/memory.md"
 cp "$SCRIPT_DIR/skills/vault-setup/SKILL.md" "$VAULT_PATH/.claude/skills/vault-setup/SKILL.md"
 cp "$SCRIPT_DIR/skills/daily/SKILL.md"       "$VAULT_PATH/.claude/skills/daily/SKILL.md"
 cp "$SCRIPT_DIR/skills/tldr/SKILL.md"        "$VAULT_PATH/.claude/skills/tldr/SKILL.md"
-cp "$SCRIPT_DIR/scripts/process_docs_to_obsidian.py" "$VAULT_PATH/scripts/process_docs_to_obsidian.py" 2>/dev/null || \
-  mkdir -p "$VAULT_PATH/scripts" && cp "$SCRIPT_DIR/scripts/process_docs_to_obsidian.py" "$VAULT_PATH/scripts/"
+cp "$SCRIPT_DIR/scripts/process_docs_to_obsidian.py" "$VAULT_PATH/scripts/process_docs_to_obsidian.py"
 
 echo -e "  ${GREEN}✓${RESET} Vault created at $VAULT_PATH"
 
 # ─── STEP 7: API key ─────────────────────────────────────────────────────────
 echo ""
 echo -e "  ${CYAN}Get your free Google API key at: https://aistudio.google.com/apikey${RESET}"
-echo -e "  ${DIM}(Used by Gemini 3 Flash to process your existing files — free tier works fine)${RESET}"
+echo -e "  ${DIM}(Used by Gemini 3 Flash to process your existing files — free tier works)${RESET}"
 echo ""
 read -p "  Paste your Google API key (or press Enter to skip): " GOOGLE_KEY
 
@@ -131,20 +138,19 @@ fi
 echo ""
 echo -e "${WHITE}Step 6/6 — Import existing files (optional)${RESET}"
 echo ""
-echo -e "  Do you have existing files to import into your vault?"
-echo -e "  ${DIM}(PDFs, Word docs, slide decks, text files — Gemini will synthesize them)${RESET}"
+echo -e "  Do you have existing files to import? (PDFs, Word docs, slides)"
+echo -e "  ${DIM}Gemini 3 Flash will synthesize them into clean Markdown notes${RESET}"
 echo ""
-read -p "  Enter folder path to import (or press Enter to skip): " IMPORT_FOLDER
+read -p "  Folder path to import (or press Enter to skip): " IMPORT_FOLDER
 
 if [ -n "$IMPORT_FOLDER" ] && [ -d "$IMPORT_FOLDER" ]; then
   echo ""
   echo "  Processing files with Gemini 3 Flash..."
-  cd "$VAULT_PATH"
-  "$SCRIPT_DIR/.venv/bin/python3" scripts/process_docs_to_obsidian.py "$IMPORT_FOLDER" "$VAULT_PATH/inbox"
+  "$SCRIPT_DIR/.venv/bin/python3" "$VAULT_PATH/scripts/process_docs_to_obsidian.py" \
+    "$IMPORT_FOLDER" "$VAULT_PATH/inbox"
   echo ""
   echo -e "  ${GREEN}✓${RESET} Files processed → saved to $VAULT_PATH/inbox"
-  echo -e "  ${DIM}Open Claude Code in your vault and say:${RESET}"
-  echo -e "  ${DIM}\"Sort everything in inbox/ into the right folders\"${RESET}"
+  echo -e "  ${DIM}Open Claude Code and say: \"Sort everything in inbox/ into the right folders\"${RESET}"
 elif [ -n "$IMPORT_FOLDER" ]; then
   echo -e "  ${ORANGE}⚠${RESET}  Folder not found: $IMPORT_FOLDER"
 fi
@@ -155,22 +161,15 @@ echo -e "  ━━━━━━━━━━━━━━━━━━━━━━━
 echo ""
 echo -e "  ${GREEN}✅ Your second brain is ready.${RESET}"
 echo ""
-echo -e "  ${WHITE}Your vault:${RESET} $VAULT_PATH"
+echo -e "  ${WHITE}Vault:${RESET} $VAULT_PATH"
 echo ""
 echo -e "  ${WHITE}Next steps:${RESET}"
-echo -e "  ${CYAN}1.${RESET} Open Obsidian and select your vault: ${DIM}$VAULT_PATH${RESET}"
-echo -e "  ${CYAN}2.${RESET} In Obsidian → Settings → General → enable 'URI scheme'"
-echo -e "  ${CYAN}3.${RESET} Open a terminal in your vault:"
+echo -e "  ${CYAN}1.${RESET} Open Obsidian → open vault → ${DIM}$VAULT_PATH${RESET}"
+echo -e "  ${CYAN}2.${RESET} Settings → General → Enable Command Line Interface"
+echo -e "  ${CYAN}3.${RESET} In a new terminal:"
 echo -e "     ${DIM}cd $VAULT_PATH && claude${RESET}"
-echo -e "  ${CYAN}4.${RESET} Run your first command: ${DIM}/vault-setup${RESET}"
-echo -e "     Claude Code will interview you and personalize your CLAUDE.md"
-echo ""
-echo -e "  ${DIM}Need to process more files later?${RESET}"
-echo -e "  ${DIM}"$SCRIPT_DIR/.venv/bin/python3" scripts/process_docs_to_obsidian.py ~/your-files $VAULT_PATH/inbox${RESET}"
+echo -e "  ${CYAN}4.${RESET} Type ${DIM}/vault-setup${RESET} — Claude Code will personalize your vault"
 echo ""
 
 # Open Obsidian
-if command -v open &>/dev/null; then
-  open -a Obsidian "$VAULT_PATH" 2>/dev/null || open -a Obsidian 2>/dev/null || true
-fi
-
+open -a Obsidian "$VAULT_PATH" 2>/dev/null || open -a Obsidian 2>/dev/null || true
