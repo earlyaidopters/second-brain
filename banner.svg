@@ -1,0 +1,56 @@
+<svg width="800" height="160" viewBox="0 0 800 160" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#C084FC;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#F472B6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#818CF8;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="subGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#A78BFA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F9A8D4;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="160" rx="12" fill="#0D0D12"/>
+
+  <!-- Subtle grid lines -->
+  <line x1="0" y1="80" x2="800" y2="80" stroke="#1E1B2E" stroke-width="1"/>
+  <line x1="400" y1="0" x2="400" y2="160" stroke="#1E1B2E" stroke-width="1"/>
+
+  <!-- Glow behind text -->
+  <ellipse cx="400" cy="72" rx="320" ry="48" fill="#7C3AED" opacity="0.08"/>
+
+  <!-- Main title -->
+  <text
+    x="400" y="82"
+    font-family="'SF Mono', 'Fira Code', 'Courier New', monospace"
+    font-size="58"
+    font-weight="900"
+    letter-spacing="6"
+    text-anchor="middle"
+    fill="url(#textGrad)"
+  >SECOND BRAIN</text>
+
+  <!-- Subtitle -->
+  <text
+    x="400" y="118"
+    font-family="'SF Mono', 'Fira Code', 'Courier New', monospace"
+    font-size="13"
+    font-weight="400"
+    letter-spacing="4"
+    text-anchor="middle"
+    fill="url(#subGrad)"
+    opacity="0.85"
+  >OBSIDIAN  ·  CLAUDE CODE  ·  ONE COMMAND</text>
+
+  <!-- Corner accents -->
+  <line x1="16" y1="16" x2="40" y2="16" stroke="#C084FC" stroke-width="1.5" opacity="0.6"/>
+  <line x1="16" y1="16" x2="16" y2="40" stroke="#C084FC" stroke-width="1.5" opacity="0.6"/>
+  <line x1="784" y1="16" x2="760" y2="16" stroke="#F472B6" stroke-width="1.5" opacity="0.6"/>
+  <line x1="784" y1="16" x2="784" y2="40" stroke="#F472B6" stroke-width="1.5" opacity="0.6"/>
+  <line x1="16" y1="144" x2="40" y2="144" stroke="#818CF8" stroke-width="1.5" opacity="0.6"/>
+  <line x1="16" y1="144" x2="16" y2="120" stroke="#818CF8" stroke-width="1.5" opacity="0.6"/>
+  <line x1="784" y1="144" x2="760" y2="144" stroke="#C084FC" stroke-width="1.5" opacity="0.6"/>
+  <line x1="784" y1="144" x2="784" y2="120" stroke="#C084FC" stroke-width="1.5" opacity="0.6"/>
+</svg>
