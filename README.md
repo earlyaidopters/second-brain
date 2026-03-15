@@ -54,47 +54,6 @@
 
 ---
 
-## The Problem
-
-You've tried to build a second brain before.
-
-Maybe Notion. Maybe Apple Notes. Maybe a folder of markdown files you swore you'd organize.
-
-Every time, the same outcome: you'd set it up, use it for a week, and then completely forget it existed.
-
-The problem was never the tool. **It was that you had to remember to use it.**
-
-That changes now.
-
----
-
-## What This Is
-
-A one-command setup that wires **Obsidian** (your local knowledge vault) to **Claude Code** (your AI agent), so that:
-
-- Claude Code **reads your notes** before answering — it knows your projects, your clients, your voice
-- Claude Code **writes your notes** after working — your vault builds itself from your sessions
-- Your existing files (PDFs, docs, slides) get **synthesized and imported automatically** via Gemini 3 Flash
-- Everything stays **local, private, and yours** — no cloud lock-in, no subscription creep
-
-The result: an AI that knows who you are from the first prompt of every session. Not because you told it. Because it read your vault.
-
----
-
-## What Gets Installed
-
-| Tool | What it is | Why |
-|------|-----------|-----|
-| **Obsidian** | Free note-taking app | Your notes live as plain `.md` files on your computer — no cloud, no subscription, yours forever |
-| **Claude Code** | Anthropic's AI terminal | Reads and writes files directly in your vault — no copy-pasting, no switching tabs |
-| **Python packages** | Background libraries | Used by Gemini 3 Flash to read and synthesize your existing files (PDFs, docs, slides) |
-| **Vault skills** | Slash commands | `/vault-setup` `/daily` `/tldr` `/file-intel` — teach Claude how to work with your vault |
-| **Obsidian Skills** *(optional)* | Official skills by [Kepano](https://github.com/kepano) (Obsidian CEO) | Lets Claude navigate, read, and write your vault natively using the Obsidian CLI |
-
-> **Nothing is uploaded.** Your vault is a folder on your computer. Claude Code reads it locally. The only optional network call is Gemini file processing — and that's fully skippable.
-
----
-
 ## Quick Start
 
 ### macOS
@@ -152,7 +111,40 @@ powershell -ExecutionPolicy Bypass -File setup.ps1
 
 The script handles the rest: installs Obsidian, installs Claude Code, creates your vault, and optionally imports your existing files.
 
-> Prefer to set things up manually? See [Manual Setup](#manual-setup) below.
+---
+
+## Why This Exists
+
+You've tried to build a second brain before.
+
+Maybe Notion. Maybe Apple Notes. Maybe a folder of markdown files you swore you'd organize.
+
+Every time, the same outcome: you'd set it up, use it for a week, and then completely forget it existed.
+
+The problem was never the tool. **It was that you had to remember to use it.**
+
+This wires **Obsidian** (your local knowledge vault) to **Claude Code** (your AI agent) so that:
+
+- Claude Code **reads your notes** before answering — it knows your projects, your clients, your voice
+- Claude Code **writes your notes** after working — your vault builds itself from your sessions
+- Your existing files (PDFs, docs, slides) get **synthesized and imported automatically** via Gemini 3 Flash
+- Everything stays **local, private, and yours** — no cloud lock-in, no subscription creep
+
+The result: an AI that knows who you are from the first prompt of every session. Not because you told it. Because it read your vault.
+
+---
+
+## What Gets Installed
+
+| Tool | What it is | Why |
+|------|-----------|-----|
+| **Obsidian** | Free note-taking app | Your notes live as plain `.md` files on your computer — no cloud, no subscription, yours forever |
+| **Claude Code** | Anthropic's AI terminal | Reads and writes files directly in your vault — no copy-pasting, no switching tabs |
+| **Python packages** | Background libraries | Used by Gemini 3 Flash to read and synthesize your existing files (PDFs, docs, slides) |
+| **Vault skills** | Slash commands | `/vault-setup` `/daily` `/tldr` `/file-intel` — teach Claude how to work with your vault |
+| **Obsidian Skills** *(optional)* | Official skills by [Kepano](https://github.com/kepano) (Obsidian CEO) | Lets Claude navigate, read, and write your vault natively using the Obsidian CLI |
+
+> **Nothing is uploaded.** Your vault is a folder on your computer. Claude Code reads it locally. The only optional network call is Gemini file processing — and that's fully skippable.
 
 ---
 
@@ -291,7 +283,8 @@ second-brain/
 
 ## Manual Setup
 
-Prefer to install each piece yourself? Here's the full step-by-step for both platforms.
+<details>
+<summary>Prefer to install each piece yourself? Click to expand the full step-by-step for both platforms.</summary>
 
 ---
 
@@ -406,6 +399,8 @@ Remove-Item $tmp -Recurse -Force
 cd "$env:USERPROFILE\second-brain"
 claude
 ```
+
+</details>
 
 ---
 
