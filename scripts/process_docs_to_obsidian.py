@@ -30,7 +30,20 @@ except ImportError:
     sys.exit(1)
 
 # ─────────────────────────────────────────────
-# CONFIG
+# CONFIG — edit these to customise behaviour
+# ─────────────────────────────────────────────
+#
+# MODEL: which Gemini model to use for synthesis
+#   "gemini-3-flash-preview"  — fast, cheap, great for most files  ← default
+#   "gemini-3-pro-preview"    — slower, higher quality for dense/complex docs
+#
+# SUPPORTED: file extensions to process — add or remove as needed
+#
+# SYNTHESIS_PROMPT (below): the instruction Gemini follows for EVERY file.
+#   This is the most powerful thing to customise. Tell Claude Code:
+#   "Edit the SYNTHESIS_PROMPT to focus on action items" or
+#   "Add a Key People section that extracts names and roles"
+#   and it will rewrite it for you.
 # ─────────────────────────────────────────────
 
 MODEL = "gemini-3-flash-preview"

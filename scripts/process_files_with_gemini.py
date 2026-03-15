@@ -36,6 +36,25 @@ if not API_KEY:
     print("Missing GOOGLE_API_KEY in .env")
     sys.exit(1)
 
+# ─────────────────────────────────────────────
+# CONFIG — edit these to customise behaviour
+# ─────────────────────────────────────────────
+#
+# MODEL: which Gemini model to use
+#   "gemini-3-flash-preview"  — fast, cheap, great for most files  ← default
+#   "gemini-3-pro-preview"    — slower, higher quality on dense docs
+#
+# OUTPUT_DIR: where summaries are saved (default: outputs/file_summaries/YYYY-MM-DD/)
+#
+# max_chars (in analyse_with_gemini below): how much text to send per file
+#   Default 12,000 chars. Raise for dense docs, lower to save API quota.
+#
+# ANALYSIS_PROMPT (below): the instruction Gemini follows for every file.
+#   Tell Claude Code to edit it in plain English — e.g.:
+#   "Add a Confidence score to every summary" or
+#   "Always extract the author name and date if present"
+# ─────────────────────────────────────────────
+
 MODEL = "gemini-3-flash-preview"
 
 BASE_DIR = Path(__file__).parent.parent
