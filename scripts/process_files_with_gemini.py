@@ -31,10 +31,14 @@ except ImportError:
     print("Install: pip install google-genai python-dotenv")
     sys.exit(1)
 
-API_KEY = os.environ.get("GOOGLE_API_KEY")
-if not API_KEY:
-    print("Missing GOOGLE_API_KEY in .env")
-    sys.exit(1)
+# Import centralized auth module
+try:
+    from gemini_auth import get_gemini_client
+except ImportError:
+    # If running from different directory, try to import from scripts/
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent))
+    from gemini_auth import get_gemini_client
 
 # ─────────────────────────────────────────────
 # CONFIG — edit these to customise behaviour
@@ -275,7 +279,8 @@ def analyse_with_gemini(client, filename: str, file_type: str, content: str) -> 
 # ── Main Pipeline ─────────────────────────────────────────────────────────────
 
 def process_folder(folder: Path):
-    client = genai.Client(api_key=API_KEY)
+    # Get authenticated client (auto-detects API Key or Vertex AI)
+    client = get_gemini_client()
 
     files = sorted([
         f for f in folder.iterdir()

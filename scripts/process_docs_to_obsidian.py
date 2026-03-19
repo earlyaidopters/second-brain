@@ -29,6 +29,14 @@ except ImportError:
     print("Install with: pip install google-genai python-dotenv")
     sys.exit(1)
 
+# Import centralized auth module
+try:
+    from gemini_auth import get_gemini_client
+except ImportError:
+    # If running from different directory, try to import from scripts/
+    sys.path.insert(0, str(Path(__file__).parent))
+    from gemini_auth import get_gemini_client
+
 # ─────────────────────────────────────────────
 # CONFIG — edit these to customise behaviour
 # ─────────────────────────────────────────────
@@ -47,7 +55,6 @@ except ImportError:
 # ─────────────────────────────────────────────
 
 MODEL = "gemini-3-flash-preview"
-API_KEY = os.environ.get("GOOGLE_API_KEY")
 TODAY = date.today().isoformat()
 
 SUPPORTED = {".pdf", ".pptx", ".ppt", ".docx", ".doc", ".txt", ".md"}
@@ -186,11 +193,8 @@ def process_file(file_path: Path, client: genai.Client) -> str | None:
 # ─────────────────────────────────────────────
 
 def process_folder(input_folder: str, output_folder: str):
-    if not API_KEY:
-        print("Error: GOOGLE_API_KEY not set in .env")
-        sys.exit(1)
-
-    client = genai.Client(api_key=API_KEY)
+    # Get authenticated client (auto-detects API Key or Vertex AI)
+    client = get_gemini_client()
     input_path = Path(input_folder).expanduser()
     output_path = Path(output_folder).expanduser()
     output_path.mkdir(parents=True, exist_ok=True)
