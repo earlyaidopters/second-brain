@@ -5,10 +5,14 @@ Uses Gemini Flash to read any file type, extract signal, and output
 clean compressed Markdown notes ready for Obsidian ingestion.
 
 Usage:
-    python process_docs_to_obsidian.py <input_folder> <output_folder>
+    python process_docs_to_obsidian.py <input_folder> <output_folder> [--recursive]
 
 Example:
     python process_docs_to_obsidian.py ~/Documents/company_files ~/vault/inbox
+    python process_docs_to_obsidian.py ~/Documents/company_files ~/vault/inbox --recursive
+
+Options:
+    --recursive, -r   Search for files recursively in subdirectories
 
 Supported file types: PDF, PPTX, DOCX, TXT, MD
 """
@@ -42,8 +46,12 @@ except ImportError:
 # ─────────────────────────────────────────────
 #
 # MODEL: which Gemini model to use for synthesis
-#   "gemini-3-flash-preview"  — fast, cheap, great for most files  ← default
-#   "gemini-3-pro-preview"    — slower, higher quality for dense/complex docs
+#   Default: reads from MODEL environment variable (.env file)
+#   Fallback: "gemini-3-flash-preview" if MODEL not set
+#   Options:
+#     "gemini-3-flash-preview"  — fast, cheap, great for most files
+#     "gemini-3-pro-preview"    — slower, higher quality for dense/complex docs
+#     "gemini-2.0-flash-exp"    — (Vertex AI) experimental 2.0 model
 #
 # SUPPORTED: file extensions to process — add or remove as needed
 #
@@ -54,7 +62,7 @@ except ImportError:
 #   and it will rewrite it for you.
 # ─────────────────────────────────────────────
 
-MODEL = "gemini-3-flash-preview"
+MODEL = os.environ.get("MODEL", "gemini-3-flash-preview")
 TODAY = date.today().isoformat()
 
 SUPPORTED = {".pdf", ".pptx", ".ppt", ".docx", ".doc", ".txt", ".md"}
@@ -192,17 +200,22 @@ def process_file(file_path: Path, client: genai.Client) -> str | None:
 # BATCH RUNNER
 # ─────────────────────────────────────────────
 
-def process_folder(input_folder: str, output_folder: str):
+def process_folder(input_folder: str, output_folder: str, recursive: bool = False):
     # Get authenticated client (auto-detects API Key or Vertex AI)
     client = get_gemini_client()
     input_path = Path(input_folder).expanduser()
     output_path = Path(output_folder).expanduser()
     output_path.mkdir(parents=True, exist_ok=True)
 
-    files = [f for f in input_path.iterdir() if f.suffix.lower() in SUPPORTED]
+    # Scan for files (recursively or top-level only)
+    if recursive:
+        files = [f for f in input_path.rglob('*') if f.is_file() and f.suffix.lower() in SUPPORTED]
+    else:
+        files = [f for f in input_path.iterdir() if f.is_file() and f.suffix.lower() in SUPPORTED]
 
     if not files:
-        print(f"No supported files found in {input_path}")
+        search_type = "recursively" if recursive else "in"
+        print(f"No supported files found {search_type} {input_path}")
         print(f"Supported types: {', '.join(SUPPORTED)}")
         return
 
@@ -236,7 +249,16 @@ def process_folder(input_folder: str, output_folder: str):
 
 
 if __name__ == "__main__":
+    # Parse command-line arguments
     if len(sys.argv) < 3:
         print(__doc__)
         sys.exit(1)
-    process_folder(sys.argv[1], sys.argv[2])
+
+    input_folder = sys.argv[1]
+    output_folder = sys.argv[2]
+    recursive = "--recursive" in sys.argv or "-r" in sys.argv
+
+    if recursive:
+        print("🔄 Recursive mode enabled: scanning subdirectories")
+
+    process_folder(input_folder, output_folder, recursive)

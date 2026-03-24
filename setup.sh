@@ -100,7 +100,7 @@ if [[ "$OSTYPE" != "darwin"* ]]; then
   exit 1
 fi
 
-echo -e "${WHITE}Step 1/7 — Checking dependencies + Homebrew${RESET}"
+echo -e "${WHITE}Step 1/8 — Checking dependencies + Homebrew${RESET}"
 
 # ─── STEP 2: Homebrew ────────────────────────────────────────────────────────
 if ! command -v brew &>/dev/null; then
@@ -112,7 +112,7 @@ fi
 
 # ─── STEP 3: Obsidian ────────────────────────────────────────────────────────
 echo ""
-echo -e "${WHITE}Step 2/7 — Installing Obsidian${RESET}"
+echo -e "${WHITE}Step 2/8 — Installing Obsidian${RESET}"
 if ! brew list --cask obsidian &>/dev/null 2>&1; then
   echo "  Installing Obsidian..."
   brew install --cask obsidian
@@ -123,7 +123,7 @@ fi
 
 # ─── STEP 4: Claude Code ─────────────────────────────────────────────────────
 echo ""
-echo -e "${WHITE}Step 3/7 — Installing Claude Code CLI${RESET}"
+echo -e "${WHITE}Step 3/8 — Installing Claude Code CLI${RESET}"
 if ! command -v claude &>/dev/null; then
   echo "  Installing Claude Code..."
   curl -fsSL https://claude.ai/install.sh | sh
@@ -135,7 +135,7 @@ fi
 
 # ─── STEP 5: Python deps (venv to avoid PEP 668 on modern macOS) ─────────────
 echo ""
-echo -e "${WHITE}Step 4/7 — Installing Python dependencies${RESET}"
+echo -e "${WHITE}Step 4/8 — Installing Python dependencies${RESET}"
 PIP_OK=false
 if command -v python3 &>/dev/null; then
   VENV_DIR="$HOME/.second-brain-venv"
@@ -153,7 +153,7 @@ fi
 
 # ─── STEP 6: Vault setup ─────────────────────────────────────────────────────
 echo ""
-echo -e "${WHITE}Step 5/7 — Setting up your vault${RESET}"
+echo -e "${WHITE}Step 5/8 — Setting up your vault${RESET}"
 echo ""
 echo -e "  Where should your second brain live?"
 echo -e "  ${DIM}Press Enter for default: ~/second-brain${RESET}"
@@ -255,6 +255,7 @@ safe_cp "$SCRIPT_DIR/skills/vault-setup/SKILL.md" "$VAULT_PATH/.claude/skills/va
 safe_cp "$SCRIPT_DIR/skills/daily/SKILL.md"       "$VAULT_PATH/.claude/skills/daily/SKILL.md"
 safe_cp "$SCRIPT_DIR/skills/tldr/SKILL.md"        "$VAULT_PATH/.claude/skills/tldr/SKILL.md"
 safe_cp "$SCRIPT_DIR/skills/file-intel/SKILL.md"  "$VAULT_PATH/.claude/skills/file-intel/SKILL.md"
+safe_cp "$SCRIPT_DIR/scripts/gemini_auth.py" "$VAULT_PATH/scripts/gemini_auth.py"
 safe_cp "$SCRIPT_DIR/scripts/process_docs_to_obsidian.py" "$VAULT_PATH/scripts/process_docs_to_obsidian.py"
 safe_cp "$SCRIPT_DIR/scripts/process_files_with_gemini.py" "$VAULT_PATH/scripts/process_files_with_gemini.py"
 
@@ -273,32 +274,184 @@ else
 fi
 echo -e "  ${GREEN}✓${RESET} Skills installed globally — work in any folder"
 
-# ─── API key (masked input) ──────────────────────────────────────────────────
+# ─── Step 6/8: Configure Gemini Authentication ──────────────────────────────
 echo ""
-echo -e "  ${CYAN}Get your free Google API key at: https://aistudio.google.com/apikey${RESET}"
-echo -e "  ${DIM}(Used by Gemini 3 Flash to process your existing files — free tier works)${RESET}"
-echo -e "  ${DIM}Your key will NOT be visible as you paste — this is normal. Press Enter when done.${RESET}"
+echo -e "${WHITE}Step 6/8 — Configure Gemini Authentication${RESET}"
 echo ""
-read -rsp "  Paste your Google API key (or press Enter to skip): " GOOGLE_KEY
-echo ""  # newline after hidden input
+echo -e "  Gemini 3 Flash processes your files (PDFs, docs, slides) into Markdown."
+echo -e "  ${DIM}Choose how to authenticate:${RESET}"
+echo ""
+echo -e "  ${CYAN}1.${RESET} Google API Key ${DIM}(recommended for individuals — free tier works)${RESET}"
+echo -e "  ${CYAN}2.${RESET} Vertex AI ${DIM}(for Google Cloud users)${RESET}"
+echo -e "  ${CYAN}3.${RESET} Skip ${DIM}(configure later by editing .env)${RESET}"
+echo ""
 
-# Trim whitespace from API key (clipboard paste often adds spaces)
-GOOGLE_KEY="$(echo "$GOOGLE_KEY" | tr -d '[:space:]')"
+# Prompt for authentication method choice
+AUTH_CHOICE=""
+while [[ ! "$AUTH_CHOICE" =~ ^[123]$ ]]; do
+  read -rp "  Choose authentication method [1-3, default 3]: " AUTH_CHOICE
+  AUTH_CHOICE="${AUTH_CHOICE:-3}"
+  if [[ ! "$AUTH_CHOICE" =~ ^[123]$ ]]; then
+    echo -e "  ${ORANGE}Please enter 1, 2, or 3${RESET}"
+  fi
+done
 
-if [ -n "$GOOGLE_KEY" ]; then
-  # Use printf to safely write the key (handles special characters)
-  printf 'GOOGLE_API_KEY=%s\n' "$GOOGLE_KEY" > "$VAULT_PATH/.env"
-  echo -e "  ${GREEN}✓${RESET} API key saved (hidden from display)"
+# Prompt for model selection (if not skipping)
+if [ "$AUTH_CHOICE" != "3" ]; then
+  echo ""
+  echo -e "  ${WHITE}Which Gemini model should file processing use?${RESET}"
+  echo -e "  ${DIM}(Same models available for both API Key and Vertex AI)${RESET}"
+  echo ""
+  echo -e "  ${CYAN}1.${RESET} gemini-3-flash-preview ${DIM}(fast, cheap, recommended)${RESET}"
+  echo -e "  ${CYAN}2.${RESET} gemini-3-pro-preview ${DIM}(slower, higher quality)${RESET}"
+  echo -e "  ${CYAN}3.${RESET} Custom model name ${DIM}(e.g., gemini-2.0-flash-exp)${RESET}"
+  echo ""
+  read -rp "  Choose model [default: 1]: " MODEL_CHOICE
+  MODEL_CHOICE="${MODEL_CHOICE:-1}"
+
+  # Map choice to model name
+  case "$MODEL_CHOICE" in
+    1)
+      GEMINI_MODEL="gemini-3-flash-preview"
+      ;;
+    2)
+      GEMINI_MODEL="gemini-3-pro-preview"
+      ;;
+    3)
+      read -rp "  Enter model name: " GEMINI_MODEL
+      GEMINI_MODEL="$(echo "$GEMINI_MODEL" | xargs)"
+      if [ -z "$GEMINI_MODEL" ]; then
+        echo -e "  ${ORANGE}Empty input, using default: gemini-3-flash-preview${RESET}"
+        GEMINI_MODEL="gemini-3-flash-preview"
+      fi
+      ;;
+    *)
+      echo -e "  ${ORANGE}Invalid choice, using default: gemini-3-flash-preview${RESET}"
+      GEMINI_MODEL="gemini-3-flash-preview"
+      ;;
+  esac
 else
+  # Skip mode: will copy .env.example which has MODEL set
+  GEMINI_MODEL=""
+fi
+
+# Check for existing .env file
+if [ -f "$VAULT_PATH/.env" ]; then
+  echo ""
+  echo -e "  ${ORANGE}⚠${RESET}  Found existing .env file at $VAULT_PATH/.env"
+  read -rp "  Overwrite with new configuration? [y/N]: " OVERWRITE_ANSWER
+  OVERWRITE_ANSWER="${OVERWRITE_ANSWER:-N}"
+  if [[ ! "$OVERWRITE_ANSWER" =~ ^[Yy] ]]; then
+    echo -e "  ${DIM}  Keeping existing .env file${RESET}"
+    AUTH_CHOICE="skip"
+  fi
+fi
+
+echo ""
+
+# Execute the chosen authentication flow
+if [ "$AUTH_CHOICE" = "1" ]; then
+  # ─── Option 1: Google API Key ──────────────────────────────────────────────
+  echo -e "  ${CYAN}Get your free Google API key at: https://aistudio.google.com/apikey${RESET}"
+  echo -e "  ${DIM}Your key will NOT be visible as you paste — this is normal. Press Enter when done.${RESET}"
+  echo ""
+  read -rsp "  Paste your Google API key (or press Enter to skip): " GOOGLE_KEY
+  echo ""  # newline after hidden input
+
+  # Trim whitespace from API key (clipboard paste often adds spaces)
+  GOOGLE_KEY="$(echo "$GOOGLE_KEY" | tr -d '[:space:]')"
+
+  if [ -n "$GOOGLE_KEY" ]; then
+    # Use printf to safely write the key (handles special characters)
+    {
+      printf 'GOOGLE_API_KEY=%s\n' "$GOOGLE_KEY"
+      printf 'MODEL=%s\n' "$GEMINI_MODEL"
+    } > "$VAULT_PATH/.env"
+    echo -e "  ${GREEN}✓${RESET} API key saved (hidden from display)"
+  else
+    if [ ! -f "$VAULT_PATH/.env" ]; then
+      safe_cp "$SCRIPT_DIR/.env.example" "$VAULT_PATH/.env"
+    fi
+    echo -e "  ${ORANGE}⚠${RESET}  Skipped — add your key to $VAULT_PATH/.env before processing files"
+  fi
+
+elif [ "$AUTH_CHOICE" = "2" ]; then
+  # ─── Option 2: Vertex AI ───────────────────────────────────────────────────
+  echo -e "  ${CYAN}Vertex AI requires a Google Cloud project. Get started at:${RESET}"
+  echo -e "  ${CYAN}https://console.cloud.google.com${RESET}"
+  echo ""
+
+  # Step 1: Collect project ID
+  read -rp "  Google Cloud Project ID (or press Enter to skip): " GCP_PROJECT
+  GCP_PROJECT="$(echo "$GCP_PROJECT" | xargs)"  # trim whitespace
+
+  if [ -z "$GCP_PROJECT" ]; then
+    echo -e "  ${ORANGE}⚠${RESET}  Skipped — Vertex AI setup cancelled"
+    if [ ! -f "$VAULT_PATH/.env" ]; then
+      safe_cp "$SCRIPT_DIR/.env.example" "$VAULT_PATH/.env"
+    fi
+  else
+    # Step 2: Collect location/region
+    echo ""
+    read -rp "  Google Cloud Location [default: us-central1]: " GCP_LOCATION
+    GCP_LOCATION="${GCP_LOCATION:-us-central1}"
+    GCP_LOCATION="$(echo "$GCP_LOCATION" | xargs)"  # trim whitespace
+
+    # Step 3: Write Vertex AI configuration
+    {
+      printf 'GOOGLE_GENAI_USE_VERTEXAI=%s\n' "true"
+      printf 'GOOGLE_CLOUD_PROJECT=%s\n' "$GCP_PROJECT"
+      printf 'GOOGLE_CLOUD_LOCATION=%s\n' "$GCP_LOCATION"
+      printf 'MODEL=%s\n' "$GEMINI_MODEL"
+    } > "$VAULT_PATH/.env"
+
+    echo ""
+    echo -e "  ${GREEN}✓${RESET} Vertex AI configuration saved"
+
+    # Step 4: gcloud authentication (optional)
+    echo ""
+    echo -e "  ${WHITE}GCloud Authentication Required:${RESET}"
+    echo -e "  Vertex AI requires application-default credentials."
+    echo ""
+
+    if command -v gcloud &>/dev/null; then
+      echo -e "  ${GREEN}✓${RESET} gcloud CLI detected"
+      echo ""
+      read -rp "  Run 'gcloud auth application-default login' now? [Y/n]: " GCLOUD_AUTH_ANSWER
+      GCLOUD_AUTH_ANSWER="${GCLOUD_AUTH_ANSWER:-Y}"
+
+      if [[ "$GCLOUD_AUTH_ANSWER" =~ ^[Yy] ]]; then
+        echo ""
+        echo "  Opening browser for authentication..."
+        if gcloud auth application-default login; then
+          echo ""
+          echo -e "  ${GREEN}✓${RESET} gcloud authentication successful"
+        else
+          echo ""
+          echo -e "  ${ORANGE}⚠${RESET}  gcloud authentication failed"
+          echo -e "     You can run it manually later: ${DIM}gcloud auth application-default login${RESET}"
+        fi
+      else
+        echo -e "  ${DIM}  Skipped — run later: gcloud auth application-default login${RESET}"
+      fi
+    else
+      echo -e "  ${ORANGE}⚠${RESET}  gcloud CLI not found"
+      echo -e "     Install it: ${CYAN}https://cloud.google.com/sdk/docs/install${RESET}"
+      echo -e "     Then run: ${DIM}gcloud auth application-default login${RESET}"
+    fi
+  fi
+
+else
+  # ─── Option 3: Skip ────────────────────────────────────────────────────────
   if [ ! -f "$VAULT_PATH/.env" ]; then
     safe_cp "$SCRIPT_DIR/.env.example" "$VAULT_PATH/.env"
   fi
-  echo -e "  ${ORANGE}⚠${RESET}  Skipped — add your key to $VAULT_PATH/.env before processing files"
+  echo -e "  ${ORANGE}⚠${RESET}  Skipped — configure authentication by editing $VAULT_PATH/.env"
 fi
 
 # ─── Import existing files ───────────────────────────────────────────────────
 echo ""
-echo -e "${WHITE}Step 6/7 — Import existing files (optional)${RESET}"
+echo -e "${WHITE}Step 7/8 — Import existing files (optional)${RESET}"
 echo ""
 echo -e "  Do you have existing files to import? (PDFs, Word docs, slides)"
 echo -e "  ${DIM}Gemini 3 Flash will synthesize them into clean Markdown notes${RESET}"
@@ -306,15 +459,30 @@ echo ""
 read -rp "  Folder path to import (or press Enter to skip): " IMPORT_FOLDER
 
 if [ -n "$IMPORT_FOLDER" ] && [ -d "$IMPORT_FOLDER" ]; then
+  # Ask about recursive scanning
+  echo ""
+  echo -e "  ${WHITE}Search for files recursively in subdirectories?${RESET}"
+  echo -e "  ${DIM}Yes: scan all nested folders | No: only top-level files${RESET}"
+  read -rp "  Scan recursively? [y/N]: " RECURSIVE_ANSWER
+  RECURSIVE_ANSWER="${RECURSIVE_ANSWER:-N}"
+
+  RECURSIVE_FLAG=""
+  if [[ "$RECURSIVE_ANSWER" =~ ^[Yy] ]]; then
+    RECURSIVE_FLAG="--recursive"
+    echo -e "  ${DIM}Will scan subdirectories recursively${RESET}"
+  else
+    echo -e "  ${DIM}Will scan top-level files only${RESET}"
+  fi
+
   if [ "$PIP_OK" = false ]; then
     echo -e "  ${ORANGE}⚠${RESET}  Python packages were not installed in Step 4."
     echo -e "     File processing may fail. Install Python + deps first, then run manually:"
-    echo -e "     ${DIM}python3 \"$VAULT_PATH/scripts/process_docs_to_obsidian.py\" \"$IMPORT_FOLDER\" \"$VAULT_PATH/inbox\"${RESET}"
+    echo -e "     ${DIM}python3 \"$VAULT_PATH/scripts/process_docs_to_obsidian.py\" \"$IMPORT_FOLDER\" \"$VAULT_PATH/inbox\" $RECURSIVE_FLAG${RESET}"
   else
     echo ""
     echo "  Processing files with Gemini 3 Flash..."
     if "$HOME/.second-brain-venv/bin/python3" "$VAULT_PATH/scripts/process_docs_to_obsidian.py" \
-      "$IMPORT_FOLDER" "$VAULT_PATH/inbox"; then
+      "$IMPORT_FOLDER" "$VAULT_PATH/inbox" $RECURSIVE_FLAG; then
       echo ""
       echo -e "  ${GREEN}✓${RESET} Files processed → saved to $VAULT_PATH/inbox"
       echo -e "  ${DIM}Open Claude Code and say: \"Sort everything in inbox/ into the right folders\"${RESET}"
@@ -329,7 +497,7 @@ fi
 
 # ─── Kepano Obsidian Skills (optional) ──────────────────────────────────────
 echo ""
-echo -e "${WHITE}Step 7/7 — Obsidian Skills by Kepano (optional)${RESET}"
+echo -e "${WHITE}Step 8/8 — Obsidian Skills by Kepano (optional)${RESET}"
 echo ""
 echo -e "  Kepano (Steph Ango) is the CEO of Obsidian. He published a set of"
 echo -e "  official agent skills that teach Claude Code to natively read, write,"
