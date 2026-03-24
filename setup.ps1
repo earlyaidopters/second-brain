@@ -113,7 +113,7 @@ Write-Host "  ====================================================="
 Write-Host ""
 
 # === STEP 1: Check winget ===================================================
-Write-Host "${White}Step 1/7 -- Checking winget${Reset}"
+Write-Host "${White}Step 1/8 -- Checking winget${Reset}"
 if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     Write-Host "  ${Red}FAIL${Reset} winget not found."
     Write-Host "        Install 'App Installer' from the Microsoft Store,"
@@ -124,7 +124,7 @@ Write-Host "  ${Green}OK${Reset} winget available"
 
 # === STEP 2: Obsidian ========================================================
 Write-Host ""
-Write-Host "${White}Step 2/7 -- Installing Obsidian${Reset}"
+Write-Host "${White}Step 2/8 -- Installing Obsidian${Reset}"
 $obsCheck = (winget list --id Obsidian.Obsidian 2>$null | Select-String "Obsidian.Obsidian")
 if (-not $obsCheck) {
     Write-Host "  Installing Obsidian..."
@@ -142,7 +142,7 @@ if (-not $obsCheck) {
 
 # === STEP 3: Claude Code =====================================================
 Write-Host ""
-Write-Host "${White}Step 3/7 -- Installing Claude Code${Reset}"
+Write-Host "${White}Step 3/8 -- Installing Claude Code${Reset}"
 if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
     Write-Host "  Installing Claude Code via winget..."
     winget install --id Anthropic.ClaudeCode --silent --accept-package-agreements --accept-source-agreements
@@ -161,7 +161,7 @@ if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
 
 # === STEP 4: Python deps =====================================================
 Write-Host ""
-Write-Host "${White}Step 4/7 -- Installing Python dependencies${Reset}"
+Write-Host "${White}Step 4/8 -- Installing Python dependencies${Reset}"
 
 $pipInstalled = $false
 
@@ -214,7 +214,7 @@ if (-not $pipInstalled) {
 
 # === STEP 5: Vault setup =====================================================
 Write-Host ""
-Write-Host "${White}Step 5/7 -- Setting up your vault${Reset}"
+Write-Host "${White}Step 5/8 -- Setting up your vault${Reset}"
 Write-Host ""
 Write-Host "  Where should your second brain live?"
 Write-Host "  ${Dim}Press Enter for default: $env:USERPROFILE\second-brain${Reset}"
@@ -230,6 +230,14 @@ if ($vaultPath.StartsWith('~')) {
 # Strip trailing backslash (unless it's a root like C:\)
 if ($vaultPath.Length -gt 3 -and $vaultPath.EndsWith('\')) {
     $vaultPath = $vaultPath.TrimEnd('\')
+}
+
+# Guard: don't let vault = the repo folder (causes identical file cp errors)
+$realVault = if (Test-Path $vaultPath) { (Resolve-Path $vaultPath).Path } else { $vaultPath }
+$realScript = (Resolve-Path $scriptDir).Path
+if ($realVault -eq $realScript) {
+    Write-Host "  ${Orange}WARNING${Reset}  Vault can't be the same folder as the repo. Using $env:USERPROFILE\second-brain instead."
+    $vaultPath = "$env:USERPROFILE\second-brain"
 }
 
 # Guard: check if path is an existing file (not a directory)
@@ -324,7 +332,7 @@ if (Test-Path "$scriptDir\memory.md") {
 }
 
 # Copy scripts (optional -- file processing won't work without them but vault still works)
-foreach ($script in @("process_docs_to_obsidian.py", "process_files_with_gemini.py")) {
+foreach ($script in @("gemini_auth.py", "process_docs_to_obsidian.py", "process_files_with_gemini.py")) {
     if (Test-Path "$scriptDir\scripts\$script") {
         Copy-Item "$scriptDir\scripts\$script" "$vaultPath\scripts\" -Force
     }
@@ -352,34 +360,191 @@ if ($isExistingVault) {
 }
 Write-Host "  ${Green}OK${Reset} Skills installed globally -- work in any folder"
 
-# API key (masked input)
+# === Step 6: Configure Gemini Authentication ================================
 Write-Host ""
-Write-Host "  ${Dim}Get your free Google API key: https://aistudio.google.com/apikey${Reset}"
-Write-Host "  ${Dim}Your key will NOT be visible as you paste -- this is normal. Press Enter when done.${Reset}"
-$secureKey = Read-Host "  Paste your Google API key (or press Enter to skip)" -AsSecureString
-$BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
-$apiKey = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
+Write-Host "${White}Step 6/8 -- Configure Gemini Authentication${Reset}"
+Write-Host ""
+Write-Host "  Gemini 3 Flash processes your files (PDFs, docs, slides) into Markdown."
+Write-Host "  ${Dim}Choose how to authenticate:${Reset}"
+Write-Host ""
+Write-Host "  ${Cyan}1.${Reset} Google API Key ${Dim}(recommended for individuals -- free tier works)${Reset}"
+Write-Host "  ${Cyan}2.${Reset} Vertex AI ${Dim}(for Google Cloud users)${Reset}"
+Write-Host "  ${Cyan}3.${Reset} Skip ${Dim}(configure later by editing .env)${Reset}"
+Write-Host ""
 
-# Trim whitespace from API key (clipboard paste often adds spaces)
-if ($apiKey) { $apiKey = $apiKey.Trim() }
+# Prompt for authentication method choice
+$authChoice = ""
+while ($authChoice -notmatch "^[123]$") {
+    $authInput = Read-Host "  Choose authentication method [1-3, default 3]"
+    if (-not $authInput) { $authInput = "3" }
+    $authChoice = $authInput
+    if ($authChoice -notmatch "^[123]$") {
+        Write-Host "  ${Orange}Please enter 1, 2, or 3${Reset}"
+    }
+}
 
-if ($apiKey) {
-    # Write without BOM (PS5.1's Out-File -Encoding UTF8 adds a BOM that breaks Python dotenv)
-    [System.IO.File]::WriteAllText("$vaultPath\.env", "GOOGLE_API_KEY=$apiKey`n", (New-Object System.Text.UTF8Encoding $false))
-    Write-Host "  ${Green}OK${Reset} API key saved (hidden from display)"
+# Prompt for model selection (if not skipping)
+$geminiModel = ""
+if ($authChoice -ne "3") {
+    Write-Host ""
+    Write-Host "  ${White}Which Gemini model should file processing use?${Reset}"
+    Write-Host "  ${Dim}(Same models available for both API Key and Vertex AI)${Reset}"
+    Write-Host ""
+    Write-Host "  ${Cyan}1.${Reset} gemini-3-flash-preview ${Dim}(fast, cheap, recommended)${Reset}"
+    Write-Host "  ${Cyan}2.${Reset} gemini-3-pro-preview ${Dim}(slower, higher quality)${Reset}"
+    Write-Host "  ${Cyan}3.${Reset} Custom model name ${Dim}(e.g., gemini-2.0-flash-exp)${Reset}"
+    Write-Host ""
+    $modelInput = Read-Host "  Choose model [default: 1]"
+    if (-not $modelInput) { $modelInput = "1" }
+
+    switch ($modelInput) {
+        "1" { $geminiModel = "gemini-3-flash-preview" }
+        "2" { $geminiModel = "gemini-3-pro-preview" }
+        "3" {
+            $customModel = Read-Host "  Enter model name"
+            $geminiModel = $customModel.Trim()
+            if (-not $geminiModel) {
+                Write-Host "  ${Orange}Empty input, using default: gemini-3-flash-preview${Reset}"
+                $geminiModel = "gemini-3-flash-preview"
+            }
+        }
+        default {
+            Write-Host "  ${Orange}Invalid choice, using default: gemini-3-flash-preview${Reset}"
+            $geminiModel = "gemini-3-flash-preview"
+        }
+    }
+}
+
+# Check for existing .env file
+if (Test-Path "$vaultPath\.env") {
+    Write-Host ""
+    Write-Host "  ${Orange}WARNING${Reset}  Found existing .env file at $vaultPath\.env"
+    $overwriteAnswer = Read-Host "  Overwrite with new configuration? [y/N]"
+    if (-not $overwriteAnswer) { $overwriteAnswer = "N" }
+    if ($overwriteAnswer -notmatch "^[Yy]") {
+        Write-Host "  ${Dim}  Keeping existing .env file${Reset}"
+        $authChoice = "skip"
+    }
+}
+
+Write-Host ""
+
+# Execute the chosen authentication flow
+if ($authChoice -eq "1") {
+    # ─── Option 1: Google API Key ────────────────────────────────────────────
+    Write-Host "  ${Cyan}Get your free Google API key at: https://aistudio.google.com/apikey${Reset}"
+    Write-Host "  ${Dim}Your key will NOT be visible as you paste -- this is normal. Press Enter when done.${Reset}"
+    Write-Host ""
+    $secureKey = Read-Host "  Paste your Google API key (or press Enter to skip)" -AsSecureString
+    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
+    $apiKey = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
+
+    # Trim whitespace from API key (clipboard paste often adds spaces)
+    if ($apiKey) { $apiKey = $apiKey.Trim() }
+
+    if ($apiKey) {
+        # Write without BOM (PS5.1's Out-File -Encoding UTF8 adds a BOM that breaks Python dotenv)
+        $envContent = "GOOGLE_API_KEY=$apiKey`nMODEL=$geminiModel`n"
+        [System.IO.File]::WriteAllText("$vaultPath\.env", $envContent, (New-Object System.Text.UTF8Encoding $false))
+        Write-Host "  ${Green}OK${Reset} API key saved (hidden from display)"
+    } else {
+        if (-not (Test-Path "$vaultPath\.env")) {
+            if (Test-Path "$scriptDir\.env.example") {
+                Copy-Item "$scriptDir\.env.example" "$vaultPath\.env" -Force
+            }
+        }
+        Write-Host "  ${Orange}WARNING${Reset}  Skipped -- add your key to $vaultPath\.env before processing files"
+    }
+
+} elseif ($authChoice -eq "2") {
+    # ─── Option 2: Vertex AI ─────────────────────────────────────────────────
+    Write-Host "  ${Cyan}Vertex AI requires a Google Cloud project. Get started at:${Reset}"
+    Write-Host "  ${Cyan}https://console.cloud.google.com${Reset}"
+    Write-Host ""
+
+    # Step 1: Collect project ID
+    $gcpProject = Read-Host "  Google Cloud Project ID (or press Enter to skip)"
+    $gcpProject = $gcpProject.Trim()
+
+    if (-not $gcpProject) {
+        Write-Host "  ${Orange}WARNING${Reset}  Skipped -- Vertex AI setup cancelled"
+        if (-not (Test-Path "$vaultPath\.env")) {
+            if (Test-Path "$scriptDir\.env.example") {
+                Copy-Item "$scriptDir\.env.example" "$vaultPath\.env" -Force
+            }
+        }
+    } else {
+        # Step 2: Collect location/region
+        Write-Host ""
+        $gcpLocationInput = Read-Host "  Google Cloud Location [default: us-central1]"
+        $gcpLocation = if ($gcpLocationInput) { $gcpLocationInput.Trim() } else { "us-central1" }
+
+        # Step 3: Write Vertex AI configuration
+        $envContent = @"
+GOOGLE_GENAI_USE_VERTEXAI=true
+GOOGLE_CLOUD_PROJECT=$gcpProject
+GOOGLE_CLOUD_LOCATION=$gcpLocation
+MODEL=$geminiModel
+"@
+        [System.IO.File]::WriteAllText("$vaultPath\.env", $envContent, (New-Object System.Text.UTF8Encoding $false))
+
+        Write-Host ""
+        Write-Host "  ${Green}OK${Reset} Vertex AI configuration saved"
+
+        # Step 4: gcloud authentication (optional)
+        Write-Host ""
+        Write-Host "  ${White}GCloud Authentication Required:${Reset}"
+        Write-Host "  Vertex AI requires application-default credentials."
+        Write-Host ""
+
+        if (Get-Command gcloud -ErrorAction SilentlyContinue) {
+            Write-Host "  ${Green}OK${Reset} gcloud CLI detected"
+            Write-Host ""
+            $gcloudAuthAnswer = Read-Host "  Run 'gcloud auth application-default login' now? [Y/n]"
+            if (-not $gcloudAuthAnswer) { $gcloudAuthAnswer = "Y" }
+
+            if ($gcloudAuthAnswer -match "^[Yy]") {
+                Write-Host ""
+                Write-Host "  Opening browser for authentication..."
+                try {
+                    gcloud auth application-default login
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host ""
+                        Write-Host "  ${Green}OK${Reset} gcloud authentication successful"
+                    } else {
+                        Write-Host ""
+                        Write-Host "  ${Orange}WARNING${Reset}  gcloud authentication failed"
+                        Write-Host "        You can run it manually later: ${Dim}gcloud auth application-default login${Reset}"
+                    }
+                } catch {
+                    Write-Host ""
+                    Write-Host "  ${Orange}WARNING${Reset}  gcloud authentication failed"
+                    Write-Host "        You can run it manually later: ${Dim}gcloud auth application-default login${Reset}"
+                }
+            } else {
+                Write-Host "  ${Dim}  Skipped -- run later: gcloud auth application-default login${Reset}"
+            }
+        } else {
+            Write-Host "  ${Orange}WARNING${Reset}  gcloud CLI not found"
+            Write-Host "        Install it: ${Cyan}https://cloud.google.com/sdk/docs/install${Reset}"
+            Write-Host "        Then run: ${Dim}gcloud auth application-default login${Reset}"
+        }
+    }
+
 } else {
+    # ─── Option 3: Skip ──────────────────────────────────────────────────────
     if (-not (Test-Path "$vaultPath\.env")) {
         if (Test-Path "$scriptDir\.env.example") {
             Copy-Item "$scriptDir\.env.example" "$vaultPath\.env" -Force
         }
     }
-    Write-Host "  ${Orange}WARNING${Reset}  Add your key to $vaultPath\.env before processing files"
+    Write-Host "  ${Orange}WARNING${Reset}  Skipped -- configure authentication by editing $vaultPath\.env"
 }
 
-# === STEP 6: Import existing files ==========================================
+# === STEP 7: Import existing files ==========================================
 Write-Host ""
-Write-Host "${White}Step 6/7 -- Import existing files (optional)${Reset}"
+Write-Host "${White}Step 7/8 -- Import existing files (optional)${Reset}"
 Write-Host ""
 Write-Host "  Do you have existing files to import? (PDFs, Word docs, slides)"
 Write-Host "  ${Dim}Gemini 3 Flash will synthesize them into clean Markdown notes${Reset}"
@@ -389,35 +554,55 @@ if ($importFolder) {
     $importFolder = $importFolder.Trim().Trim('"').Trim("'")
 }
 if ($importFolder -and (Test-Path $importFolder)) {
+    # Ask about recursive scanning
+    Write-Host ""
+    Write-Host "  ${White}Search for files recursively in subdirectories?${Reset}"
+    Write-Host "  ${Dim}Yes: scan all nested folders | No: only top-level files${Reset}"
+    $recursiveAnswer = Read-Host "  Scan recursively? [y/N]"
+    if (-not $recursiveAnswer) { $recursiveAnswer = "N" }
+
+    $recursiveFlag = ""
+    if ($recursiveAnswer -match "^[Yy]") {
+        $recursiveFlag = "--recursive"
+        Write-Host "  ${Dim}Will scan subdirectories recursively${Reset}"
+    } else {
+        Write-Host "  ${Dim}Will scan top-level files only${Reset}"
+    }
+
     if (-not $pipInstalled) {
         Write-Host "  ${Orange}WARNING${Reset}  Python packages were not installed in Step 4."
-        Write-Host "        File processing may fail. Install Python first, then run manually:"
-        Write-Host "        python `"$vaultPath\scripts\process_docs_to_obsidian.py`" `"$importFolder`" `"$vaultPath\inbox`""
+        Write-Host "        File processing may fail. Install Python + deps first, then run manually:"
+        Write-Host "        python `"$vaultPath\scripts\process_docs_to_obsidian.py`" `"$importFolder`" `"$vaultPath\inbox`" $recursiveFlag"
     } else {
+        Write-Host ""
         Write-Host "  Processing files with Gemini 3 Flash..."
         $pythonCmd = $null
         if (Get-Command python -ErrorAction SilentlyContinue) { $pythonCmd = "python" }
         elseif (Get-Command py -ErrorAction SilentlyContinue) { $pythonCmd = "py" }
         if ($pythonCmd) {
-            & $pythonCmd "$vaultPath\scripts\process_docs_to_obsidian.py" $importFolder "$vaultPath\inbox"
+            $cmdArgs = @("$vaultPath\scripts\process_docs_to_obsidian.py", $importFolder, "$vaultPath\inbox")
+            if ($recursiveFlag) { $cmdArgs += $recursiveFlag }
+            & $pythonCmd $cmdArgs
             if ($LASTEXITCODE -eq 0) {
+                Write-Host ""
                 Write-Host "  ${Green}OK${Reset} Files processed -> saved to $vaultPath\inbox"
                 Write-Host "  ${Dim}Open Claude Code and say: 'Sort everything in inbox/ into the right folders'${Reset}"
             } else {
-                Write-Host "  ${Orange}WARNING${Reset}  File processing had errors -- check your API key in .env"
+                Write-Host ""
+                Write-Host "  ${Orange}WARNING${Reset}  File processing failed -- check your API key in .env and try again manually"
             }
         } else {
             Write-Host "  ${Orange}WARNING${Reset}  Python not found -- install Python first, then run:"
-            Write-Host "        python `"$vaultPath\scripts\process_docs_to_obsidian.py`" `"$importFolder`" `"$vaultPath\inbox`""
+            Write-Host "        python `"$vaultPath\scripts\process_docs_to_obsidian.py`" `"$importFolder`" `"$vaultPath\inbox`" $recursiveFlag"
         }
     }
 } elseif ($importFolder) {
     Write-Host "  ${Orange}WARNING${Reset}  Folder not found: $importFolder"
 }
 
-# === STEP 7: Kepano Obsidian Skills (optional) ==============================
+# === STEP 8: Kepano Obsidian Skills (optional) ==============================
 Write-Host ""
-Write-Host "${White}Step 7/7 -- Obsidian Skills by Kepano (optional)${Reset}"
+Write-Host "${White}Step 8/8 -- Obsidian Skills by Kepano (optional)${Reset}"
 Write-Host ""
 Write-Host "  Kepano (Steph Ango) is the CEO of Obsidian. He published a set of"
 Write-Host "  official agent skills that teach Claude Code to natively read, write,"

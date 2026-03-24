@@ -5,6 +5,10 @@ Process any folder of files through Gemini — extract content, summarise, analy
 Usage:
   python scripts/process_files_with_gemini.py                    # processes demo_files/
   python scripts/process_files_with_gemini.py path/to/folder     # processes custom folder
+  python scripts/process_files_with_gemini.py path/to/folder --recursive  # scan subdirectories
+
+Options:
+  --recursive, -r   Search for files recursively in subdirectories
 
 Supported: PDF, PPTX, XLSX, DOCX, CSV, JSON, XML, MD, TXT, PY, JS, HTML, CSS, any text file
 
@@ -31,18 +35,26 @@ except ImportError:
     print("Install: pip install google-genai python-dotenv")
     sys.exit(1)
 
-API_KEY = os.environ.get("GOOGLE_API_KEY")
-if not API_KEY:
-    print("Missing GOOGLE_API_KEY in .env")
-    sys.exit(1)
+# Import centralized auth module
+try:
+    from gemini_auth import get_gemini_client
+except ImportError:
+    # If running from different directory, try to import from scripts/
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent))
+    from gemini_auth import get_gemini_client
 
 # ─────────────────────────────────────────────
 # CONFIG — edit these to customise behaviour
 # ─────────────────────────────────────────────
 #
 # MODEL: which Gemini model to use
-#   "gemini-3-flash-preview"  — fast, cheap, great for most files  ← default
-#   "gemini-3-pro-preview"    — slower, higher quality on dense docs
+#   Default: reads from MODEL environment variable (.env file)
+#   Fallback: "gemini-3-flash-preview" if MODEL not set
+#   Options:
+#     "gemini-3-flash-preview"  — fast, cheap, great for most files
+#     "gemini-3-pro-preview"    — slower, higher quality on dense docs
+#     "gemini-2.0-flash-exp"    — (Vertex AI) experimental 2.0 model
 #
 # OUTPUT_DIR: where summaries are saved (default: outputs/file_summaries/YYYY-MM-DD/)
 #
@@ -55,7 +67,7 @@ if not API_KEY:
 #   "Always extract the author name and date if present"
 # ─────────────────────────────────────────────
 
-MODEL = "gemini-3-flash-preview"
+MODEL = os.environ.get("MODEL", "gemini-3-flash-preview")
 
 BASE_DIR = Path(__file__).parent.parent
 TODAY = date.today().isoformat()
@@ -274,19 +286,29 @@ def analyse_with_gemini(client, filename: str, file_type: str, content: str) -> 
 
 # ── Main Pipeline ─────────────────────────────────────────────────────────────
 
-def process_folder(folder: Path):
-    client = genai.Client(api_key=API_KEY)
+def process_folder(folder: Path, recursive: bool = False):
+    # Get authenticated client (auto-detects API Key or Vertex AI)
+    client = get_gemini_client()
 
-    files = sorted([
-        f for f in folder.iterdir()
-        if f.is_file() and not f.name.startswith(".")
-    ])
+    # Scan for files (recursively or top-level only)
+    if recursive:
+        files = sorted([
+            f for f in folder.rglob('*')
+            if f.is_file() and not f.name.startswith(".")
+        ])
+    else:
+        files = sorted([
+            f for f in folder.iterdir()
+            if f.is_file() and not f.name.startswith(".")
+        ])
 
     if not files:
-        print(f"No files found in {folder}")
+        search_type = "recursively in" if recursive else "in"
+        print(f"No files found {search_type} {folder}")
         sys.exit(1)
 
-    print(f"\n🔍 Processing {len(files)} files from: {folder}")
+    search_mode = " (recursive)" if recursive else ""
+    print(f"\n🔍 Processing {len(files)} files from: {folder}{search_mode}")
     print(f"📂 Output folder: {OUTPUT_DIR}\n")
     print("─" * 60)
 
@@ -351,16 +373,22 @@ def process_folder(folder: Path):
 
 
 def main():
-    if len(sys.argv) > 1:
+    # Parse command-line arguments
+    if len(sys.argv) > 1 and sys.argv[1] not in ("--recursive", "-r"):
         folder = Path(sys.argv[1])
     else:
         folder = BASE_DIR / "demo_files"
+
+    recursive = "--recursive" in sys.argv or "-r" in sys.argv
 
     if not folder.exists():
         print(f"Folder not found: {folder}")
         sys.exit(1)
 
-    process_folder(folder)
+    if recursive:
+        print("🔄 Recursive mode enabled: scanning subdirectories\n")
+
+    process_folder(folder, recursive)
 
 
 if __name__ == "__main__":

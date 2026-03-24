@@ -19,15 +19,45 @@ If you want a fast overview of what's in a folder before deciding what to keep, 
 
 ## Prerequisites
 
+**Step 1: Install dependencies**
+
 ```bash
-# 1. Get a free Google API key
-# https://aistudio.google.com/apikey
-
-# 2. Add it to your vault's .env file
-echo "GOOGLE_API_KEY=your_key_here" > .env
-
-# 3. Install dependencies (setup.sh / setup.ps1 does this automatically)
+# The setup scripts do this automatically, or run manually:
 pip install google-genai python-dotenv pdfplumber python-pptx python-docx openpyxl
+```
+
+**Step 2: Choose your authentication method**
+
+### Authentication: Choose Your Method
+
+Both scripts support two authentication methods. Choose the one that fits your needs:
+
+**Option 1: Google AI Studio API Key** *(Recommended for individuals)*
+
+```bash
+# 1. Get a free key at: https://aistudio.google.com/apikey
+# 2. Add to your .env file:
+echo "GOOGLE_API_KEY=your_key_here" >> .env
+```
+
+**Option 2: Vertex AI** *(For Google Cloud users)*
+
+```bash
+# 1. Enable Vertex AI in your Google Cloud project
+# 2. Add to your .env file:
+cat >> .env << 'EOF'
+GOOGLE_GENAI_USE_VERTEXAI=true
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_LOCATION=us-central1
+EOF
+# 3. Authenticate with Google Cloud:
+gcloud auth application-default login
+```
+
+**How it works:** The scripts auto-detect which method to use based on your `.env` settings. You can verify your setup by running:
+
+```bash
+python scripts/gemini_auth.py
 ```
 
 ---
@@ -168,7 +198,28 @@ process_files_with_gemini.py → outputs/file_summaries/YYYY-MM-DD/
 
 ## Troubleshooting
 
-**`GOOGLE_API_KEY not set`** — check your `.env` file is in the vault root and contains `GOOGLE_API_KEY=your_key`
+### Authentication Issues
+
+**`GOOGLE_API_KEY not set`** or **`GOOGLE_CLOUD_PROJECT is not set`**
+
+Check which authentication method you're using:
+```bash
+python scripts/gemini_auth.py
+```
+
+For **API Key method**:
+- Verify your `.env` file is in the vault root
+- Check it contains `GOOGLE_API_KEY=your_key` (no spaces around `=`)
+- Verify the key is valid at https://aistudio.google.com/apikey
+
+For **Vertex AI method**:
+- Verify `.env` contains `GOOGLE_GENAI_USE_VERTEXAI=true`
+- Check `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` are set
+- Ensure you've run: `gcloud auth application-default login`
+- Verify Vertex AI API is enabled in your GCP project
+- Check your GCP account has permission to use Vertex AI
+
+### Other Issues
 
 **`No module named 'google'`** — run `pip install google-genai`
 
