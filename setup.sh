@@ -113,12 +113,16 @@ fi
 # ─── STEP 3: Obsidian ────────────────────────────────────────────────────────
 echo ""
 echo -e "${WHITE}Step 2/7 — Installing Obsidian${RESET}"
-if ! brew list --cask obsidian &>/dev/null 2>&1; then
-  echo "  Installing Obsidian..."
-  brew install --cask obsidian
-  echo -e "  ${GREEN}✓${RESET} Obsidian installed"
-else
+# Check brew AND direct DMG install (/Applications/Obsidian.app)
+if brew list --cask obsidian &>/dev/null 2>&1 || [ -d "/Applications/Obsidian.app" ]; then
   echo -e "  ${GREEN}✓${RESET} Obsidian already installed"
+else
+  echo "  Installing Obsidian..."
+  if brew install --cask obsidian; then
+    echo -e "  ${GREEN}✓${RESET} Obsidian installed"
+  else
+    echo -e "  ${ORANGE}⚠${RESET}  Could not install via Homebrew. Download from: https://obsidian.md/download"
+  fi
 fi
 
 # ─── STEP 4: Claude Code ─────────────────────────────────────────────────────
@@ -126,9 +130,12 @@ echo ""
 echo -e "${WHITE}Step 3/7 — Installing Claude Code CLI${RESET}"
 if ! command -v claude &>/dev/null; then
   echo "  Installing Claude Code..."
-  curl -fsSL https://claude.ai/install.sh | sh
-  echo -e "  ${GREEN}✓${RESET} Claude Code installed"
-  echo -e "  ${DIM}  Note: restart terminal if 'claude' isn't found after setup${RESET}"
+  if curl -fsSL https://claude.ai/install.sh | sh; then
+    echo -e "  ${GREEN}✓${RESET} Claude Code installed"
+    echo -e "  ${DIM}  Note: restart terminal if 'claude' isn't found after setup${RESET}"
+  else
+    echo -e "  ${ORANGE}⚠${RESET}  Install failed. Try manually: npm install -g @anthropic-ai/claude-code"
+  fi
 else
   echo -e "  ${GREEN}✓${RESET} Claude Code already installed"
 fi
@@ -371,7 +378,7 @@ echo -e "  ${WHITE}Checking installation...${RESET}"
 echo -e "  ${DIM}(Any failures above are safe to retry — just re-run this script.)${RESET}"
 echo ""
 
-if brew list --cask obsidian &>/dev/null 2>&1; then
+if brew list --cask obsidian &>/dev/null 2>&1 || [ -d "/Applications/Obsidian.app" ]; then
   echo -e "  ${GREEN}✓${RESET} Obsidian"
 else
   echo -e "  ${ORANGE}✗${RESET} Obsidian — run: brew install --cask obsidian"
